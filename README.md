@@ -1,5 +1,5 @@
 # SitemapCreator
-Simple super awesome sitemap creator writen in PHP
+Super simple sitemap creator writen in PHP
 
 ### Usage
 Create an object from SitemapCreator class and call Create function like that:
