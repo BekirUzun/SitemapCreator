@@ -6,7 +6,7 @@
 
 class SitemapCreator
 {
-	private $xml, $urlset, $urlList, $host, $protocol;
+	private $xml, $urlset, $urlList, $host, $protocol, $remainingCount;
 
 	public function __construct()
 	{
@@ -38,13 +38,17 @@ class SitemapCreator
 			return false;
 
 		$parsed = parse_url($url);
-		$this->host = $parsed['host'];
-		// die(var_dump($parsed));
 
+		// given url most be main page of domain
+		if (isset($parsed['path']) && $parsed['path'] !== '/')
+			return false;
+
+		$this->host = $parsed['host'];
 		$this->protocol = $parsed['scheme'] . '://';
+		$this->remainingCount = $count;
 		
 		//start creation of sitemap starting from $url
-		$this->AddUrls($url, $count, 1.0);
+		$this->AddUrls($url, 1.0);
 
 		return $this->xml->asXML();
 	}
@@ -56,30 +60,21 @@ class SitemapCreator
 	 * @param float priority
 	 * @return XML
 	 */
-	private function AddUrls($currentUrl, $remainingCount, $priority)
+	private function AddUrls($currentUrl, $priority)
 	{	
-
-		if ($remainingCount === 0)
-			return;
-		
 		$newUrls = $this->ParseUrls($currentUrl);
-		// die(var_dump($newUrls));
 
+		//no new urls for current page
 		if (count($newUrls) === 0)
 			return;
 
 		foreach ($newUrls as $url) {
-			if ($remainingCount === 0)
-				return;
-			
 			if (!$this->ValidateUrl($url))
 				continue;
 
 			//if current url is already added to sitemap, skip it
 			if (in_array($url, $this->urlList))
 				continue;
-
-			//TODO: check if url is a page (not .png, .jpg etc.)
 
 			array_push($this->urlList, $url);
 			$urlNode = $this->urlset->addChild('url');
@@ -89,14 +84,19 @@ class SitemapCreator
 			// $urlNode->addChild('lastmod', $lastmod);
 			// $urlNode->addChild('changefreq', $changefreq);
 			$urlNode->addChild('priority', $priority);
-			$remainingCount--;
+			$this->remainingCount--;
+
+			if ($this->remainingCount === 0)
+				return;
 		}
 
-		if ($remainingCount === 0)
-			return;
-
 		foreach ($newUrls as $url) {
-			$this->AddUrls($url, $remainingCount, $priority * 0.9);
+			if ($this->remainingCount === 0)
+				return;
+
+			// reduce priority by 10% for each recursive level
+			// it helps tracing recursive levels
+			$this->AddUrls($url, $priority * 0.9);
 		}
 
 	}
@@ -131,32 +131,30 @@ class SitemapCreator
 			if (isset($parsed['scheme']) && $parsed['scheme'] === 'javascript')
 				continue;
 
-			//link is not same domain.
+			//link is not in same domain.
 			if (isset($parsed['host']) && $parsed['host'] !== $this->host )
 				continue;
 
-			//link doesn't have host. <a href="/hey"> or <a href="hey">
+			//link doesn't have host
 			if (!isset($parsed['host'])){
 
 				//TODO: handle urls better.
+
 				if ($href[0] === '.') {
+					// <a href="./hey">
 					$href = substr($href, 1);
 				}
 
 				if ($href[0] !== '/') {
+					// <a href="hey">
 					$href = '/' . $href;
 				}
 
 				$href = $this->protocol . $this->host . $href;
-
-				// if ($href[0] === '/')
-				// 	$href = $this->protocol. $this->host . $href;
-				// else if ($href[0] === '.' && strlen($href[0]) > 2 ) 
-				// 	$href = $this->protocol. $this->host . substr($href, 1);
-				// else
-				// 	$href = $this->protocol. $this->host .'/'. $href;
 			}
 			
+			//did we added this url to sitemap before?
+			// is this url exists more than once in current page?
 			if (in_array($href, $this->urlList) || in_array($href, $urls))
 				continue;
 
@@ -186,7 +184,7 @@ class SitemapCreator
 	 */
 	private function ValidateUrl($url)
 	{
-		// TODO: implement better validation maybe?
+		//TODO: check if url is a page (not .png, .jpg etc.)
 		return filter_var($url, FILTER_VALIDATE_URL);
 	}
 
